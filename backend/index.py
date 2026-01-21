@@ -12,6 +12,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 import jwt  # noqa: F401
 from passlib.context import CryptContext
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from database import get_db
 from models import Profile, ImpactLog
@@ -32,6 +34,16 @@ security = HTTPBearer()
 # Create the main app
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/")
+def root():
+    return {"status": "Backend running"}
 # Create API router
 api_router = APIRouter(prefix="/api")
 
