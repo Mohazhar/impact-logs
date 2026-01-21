@@ -1,0 +1,145 @@
+{
+  "identity": {
+    "name": "Local Impact Log",
+    "tone": "Civic, Trustworthy, Efficient, Empowering",
+    "archetype": "The Modern Steward",
+    "theme_mode": "light"
+  },
+  "typography": {
+    "headings": {
+      "family": "Outfit",
+      "weights": ["500", "700"],
+      "usage": "Headings, Hero Text, Big Numbers",
+      "cdn_import": "@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;700;900&display=swap');"
+    },
+    "body": {
+      "family": "Public Sans",
+      "weights": ["400", "500", "600"],
+      "usage": "Body text, UI elements, Forms, Data tables",
+      "cdn_import": "@import url('https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&display=swap');"
+    }
+  },
+  "colors": {
+    "palette": {
+      "primary": {
+        "name": "Civic Emerald",
+        "hex": "#047857",
+        "tailwind": "emerald-700",
+        "usage": "Primary buttons, active states, brand identity"
+      },
+      "secondary": {
+        "name": "Alert Amber",
+        "hex": "#F59E0B",
+        "tailwind": "amber-500",
+        "usage": "Status indicators (Pending), Warnings, Highlights"
+      },
+      "accent": {
+        "name": "Infrastructure Slate",
+        "hex": "#334155",
+        "tailwind": "slate-700",
+        "usage": "Headings, Icons, Map markers"
+      },
+      "background": {
+        "name": "Public Stone",
+        "hex": "#FAFAF9",
+        "tailwind": "stone-50",
+        "usage": "App background, Section backgrounds"
+      },
+      "surface": {
+        "name": "Paper White",
+        "hex": "#FFFFFF",
+        "tailwind": "white",
+        "usage": "Cards, Modals, Sidebar"
+      }
+    },
+    "status_colors": {
+      "solving": "amber-500",
+      "solved": "emerald-600",
+      "fake": "red-500",
+      "pending": "slate-400"
+    }
+  },
+  "layout_strategies": {
+    "landing_page": {
+      "hero": {
+        "style": "Split Screen or Central Focus",
+        "elements": [
+          "Large 'Report an Issue' CTA",
+          "Live Counter of Solved Issues",
+          "Background: Subtle map pattern or blurred city aerial"
+        ]
+      },
+      "features": {
+        "style": "Bento Grid (Mode A)",
+        "content": [
+          "Real-time Tracking (Large Card)",
+          "GPS Accuracy (Tall Card)",
+          "Community Impact Stats (Square Card)"
+        ]
+      }
+    },
+    "dashboard": {
+      "structure": "Sidebar Navigation + Top Header + Main Content Area",
+      "grid": "High Density (Mode B)",
+      "map_integration": "Map should be a primary view option, not just an embed. Use 'Mapbox' style visuals."
+    }
+  },
+  "component_rules": {
+    "buttons": {
+      "style": "Pill-shaped or slightly rounded (rounded-md)",
+      "interaction": "Scale down slightly on click (active:scale-95)",
+      "shadow": "shadow-sm hover:shadow-md transition-all"
+    },
+    "cards": {
+      "style": "Flat with 1px border (border-stone-200) and subtle shadow-sm",
+      "hover": "hover:border-emerald-500/50 hover:shadow-md transition-all duration-300"
+    },
+    "inputs": {
+      "style": "bg-white border-stone-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+    },
+    "status_badges": {
+      "style": "Pill shape, uppercase, tracking-wider, text-xs, font-bold"
+    }
+  },
+  "visual_enhancers": {
+    "textures": "Use subtle 'noise' overlay on the Stone-50 background to give it a paper-like feel.",
+    "glassmorphism": "Use only for sticky headers and floating map controls (bg-white/80 backdrop-blur-md).",
+    "motion": {
+      "page_transition": "Fade in + Slide up (10px)",
+      "hover_lift": "-translate-y-1",
+      "list_stagger": "Stagger children by 0.05s"
+    }
+  },
+  "image_assets": {
+    "note": "Image tool failed. Use these search terms to find images or use placeholders.",
+    "hero_bg": {
+      "search_term": "modern city aerial view daytime",
+      "alt": "Aerial view of a clean city",
+      "category": "hero"
+    },
+    "community": {
+      "search_term": "diverse community volunteers happy",
+      "alt": "Community members working together",
+      "category": "about"
+    },
+    "infrastructure": {
+      "search_term": "urban infrastructure repair construction",
+      "alt": "Road repair work",
+      "category": "features"
+    },
+    "map_preview": {
+      "search_term": "city street map view",
+      "alt": "Map interface preview",
+      "category": "ui_preview"
+    }
+  },
+  "universal_guidelines": [
+    "Do not use gradients for text.",
+    "Ensure all text has a contrast ratio of at least 4.5:1 against the background.",
+    "Use 'sonner' for all toast notifications.",
+    "Use 'lucide-react' for icons.",
+    "All interactive elements must have 'data-testid'.",
+    "Mobile-first: Ensure map controls are touch-friendly (min 44px target)."
+  ],
+  "instructions_to_main_agent": "Implement the design using the specified fonts and colors. Since image URLs are missing, use high-quality placeholders or search for the provided terms if you have access. Prioritize the 'Civic Emerald' and 'Stone' aesthetic. Ensure the dashboard feels like a professional tool, not a toy."
+}
