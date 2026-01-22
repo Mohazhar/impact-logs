@@ -15,8 +15,8 @@ from passlib.context import CryptContext
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from database import get_db
-from models import Profile, ImpactLog
+from .database import get_db
+from .models import Profile, ImpactLog
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
