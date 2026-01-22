@@ -2,11 +2,16 @@
   "version": 2,
   "builds": [
     {
-      "src": "package.json",
+      "src": "frontend/package.json",
       "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dist"
+      "config": { 
+        "distDir": "build",
+        "installCommand": "npm install --legacy-peer-deps" 
       }
+    },
+    {
+      "src": "backend/api/index.py",
+      "use": "@vercel/python"
     }
   ],
   "rewrites": [
@@ -16,7 +21,7 @@
     },
     {
       "source": "/(.*)",
-      "destination": "/index.html"
+      "destination": "frontend/$1"
     }
   ]
 }
