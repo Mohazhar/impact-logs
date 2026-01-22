@@ -13,11 +13,11 @@ from dotenv import load_dotenv
 import jwt
 from passlib.context import CryptContext
 
-# Import local modules using relative imports for Vercel compatibility
+# Relative imports are essential for Vercel's directory structure
 from .database import get_db
 from .models import Profile, ImpactLog
 
-# Setup logging
+# Setup logging for production debugging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -27,22 +27,25 @@ logger = logging.getLogger(__name__)
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# Password hashing
+# Password hashing configuration
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# JWT settings
+# JWT and Secret settings
 JWT_SECRET = os.environ.get('JWT_SECRET', 'your-secret-key')
 JWT_ALGORITHM = os.environ.get('JWT_ALGORITHM', 'HS256')
 JWT_EXPIRE_MINUTES = int(os.environ.get('JWT_EXPIRE_MINUTES', '1440'))
 
 security = HTTPBearer()
 
-# Create the main app instance
+# Create the main FastAPI instance
 app = FastAPI(title="Local Impact Log API")
 
-# Senior Developer Move: Define allowed origins specifically to prevent CORS "Redirect" errors
-# Pull origins from Env or default to common dev ports + your Vercel URL
-ALLOWED_ORIGINS = os.environ.get('CORS_ORIGINS', 'https://impact-logs-five.vercel.app,https://impact-logs-vant.vercel.app,http://localhost:3000,http://localhost:5173').split(',')
+# Senior Developer Fix: Explicit CORS configuration to prevent redirect errors
+# Pull origins from environment or default to your known Vercel domains
+ALLOWED_ORIGINS = os.environ.get(
+    'CORS_ORIGINS', 
+    'https://impact-logs-five.vercel.app,https://impact-logs-vant.vercel.app,http://localhost:3000,http://localhost:5173'
+).split(',')
 
 app.add_middleware(
     CORSMiddleware,
@@ -52,15 +55,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Root endpoint for health checks
+# Root endpoint for Vercel deployment health check
 @app.get("/")
 def root():
-    return {"status": "Backend running", "environment": "Production"}
+    return {"status": "Backend active", "timestamp": str(datetime.now())}
 
-# Create API router
+# Create API router for versioned or grouped routes
 api_router = APIRouter(prefix="/api")
 
-# --- Pydantic Schemas ---
+# --- Pydantic Data Models (Schemas) ---
 class SignupRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6)
@@ -106,7 +109,7 @@ class ImpactLogResponse(BaseModel):
 class StatusUpdate(BaseModel):
     status: str
 
-# --- Helper functions ---
+# --- Security & Auth Helper Functions ---
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
@@ -125,25 +128,25 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         user_id = payload.get("sub")
         if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid token")
+            raise HTTPException(status_code=401, detail="Invalid token: missing subject")
         
         result = await db.execute(select(Profile).where(Profile.id == user_id))
         user = result.scalar_one_or_none()
         if not user:
-            raise HTTPException(status_code=401, detail="User not found")
+            raise HTTPException(status_code=401, detail="User associated with token not found")
         
         return user
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.PyJWTError: # Corrected from jwt.JWTError
-        raise HTTPException(status_code=401, detail="Invalid token")
+        raise HTTPException(status_code=401, detail="Authentication token has expired")
+    except jwt.PyJWTError: 
+        raise HTTPException(status_code=401, detail="Invalid authentication token")
 
-# --- Auth Routes ---
+# --- Authentication Endpoints ---
 @api_router.post("/auth/signup", response_model=TokenResponse)
 async def signup(request: SignupRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Profile).where(Profile.email == request.email))
     if result.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(status_code=400, detail="An account with this email already exists")
     
     new_user = Profile(
         email=request.email,
@@ -173,7 +176,7 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
     user = result.scalar_one_or_none()
     
     if not user or not verify_password(request.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(status_code=401, detail="Invalid email or password")
     
     token = create_access_token({"sub": str(user.id), "role": user.role})
     
@@ -196,7 +199,7 @@ async def get_me(current_user: Profile = Depends(get_current_user)):
         "role": current_user.role
     }
 
-# --- Impact Logs Routes ---
+# --- Protected Impact Log Endpoints ---
 @api_router.post("/impact-logs", response_model=ImpactLogResponse)
 async def create_impact_log(request: ImpactLogCreate, current_user: Profile = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     new_log = ImpactLog(
@@ -231,7 +234,7 @@ async def create_impact_log(request: ImpactLogCreate, current_user: Profile = De
 @api_router.get("/impact-logs/all", response_model=List[ImpactLogResponse])
 async def get_all_logs(current_user: Profile = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     if current_user.role != 'admin':
-        raise HTTPException(status_code=403, detail="Admin access required")
+        raise HTTPException(status_code=403, detail="Administrative privileges required")
     
     result = await db.execute(
         select(ImpactLog, Profile)
@@ -269,13 +272,13 @@ async def update_log_status(
     db: AsyncSession = Depends(get_db)
 ):
     if current_user.role != 'admin':
-        raise HTTPException(status_code=403, detail="Admin access required")
+        raise HTTPException(status_code=403, detail="Administrative privileges required")
     
     result = await db.execute(select(ImpactLog).where(ImpactLog.id == log_id))
     log = result.scalar_one_or_none()
     
     if not log:
-        raise HTTPException(status_code=404, detail="Log not found")
+        raise HTTPException(status_code=404, detail="Impact log record not found")
     
     log.status = status_update.status
     await db.commit()
@@ -295,7 +298,7 @@ async def update_log_status(
         "created_at": str(log.created_at)
     }
 
-# --- Public Endpoints ---
+# --- Public Map Endpoints (No Auth Required) ---
 @api_router.get("/public/impact-logs", response_model=List[ImpactLogResponse])
 async def get_public_logs(db: AsyncSession = Depends(get_db)):
     try:
@@ -323,8 +326,8 @@ async def get_public_logs(db: AsyncSession = Depends(get_db)):
             for log in logs
         ]
     except Exception as e:
-        logger.error(f"Error fetching public logs: {e}")
+        logger.error(f"Error fetching public map logs: {e}")
         return []
 
-# Include the router in the main app
+# Final Step: Include the unified router into the main app instance
 app.include_router(api_router)
