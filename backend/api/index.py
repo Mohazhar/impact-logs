@@ -1,6 +1,6 @@
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from starlette.middleware.cors import CORSMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, EmailStr, Field
@@ -10,13 +10,19 @@ import os
 import logging
 from pathlib import Path
 from dotenv import load_dotenv
-import jwt  # noqa: F401
+import jwt
 from passlib.context import CryptContext
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
+# Import local modules using relative imports for Vercel compatibility
 from .database import get_db
 from .models import Profile, ImpactLog
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -31,23 +37,30 @@ JWT_EXPIRE_MINUTES = int(os.environ.get('JWT_EXPIRE_MINUTES', '1440'))
 
 security = HTTPBearer()
 
-# Create the main app
-app = FastAPI()
+# Create the main app instance
+app = FastAPI(title="Local Impact Log API")
+
+# Senior Developer Move: Define allowed origins specifically to prevent CORS "Redirect" errors
+# Pull origins from Env or default to common dev ports + your Vercel URL
+ALLOWED_ORIGINS = os.environ.get('CORS_ORIGINS', 'https://impact-logs-five.vercel.app,https://impact-logs-vant.vercel.app,http://localhost:3000,http://localhost:5173').split(',')
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Root endpoint for health checks
 @app.get("/")
 def root():
-    return {"status": "Backend running"}
+    return {"status": "Backend running", "environment": "Production"}
+
 # Create API router
 api_router = APIRouter(prefix="/api")
 
-# Pydantic models
+# --- Pydantic Schemas ---
 class SignupRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6)
@@ -93,7 +106,7 @@ class ImpactLogResponse(BaseModel):
 class StatusUpdate(BaseModel):
     status: str
 
-# Helper functions
+# --- Helper functions ---
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
@@ -122,18 +135,16 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         return user
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.JWTError:
+    except jwt.PyJWTError: # Corrected from jwt.JWTError
         raise HTTPException(status_code=401, detail="Invalid token")
 
-# Auth routes
+# --- Auth Routes ---
 @api_router.post("/auth/signup", response_model=TokenResponse)
 async def signup(request: SignupRequest, db: AsyncSession = Depends(get_db)):
-    # Check if user exists
     result = await db.execute(select(Profile).where(Profile.email == request.email))
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    # Create new user
     new_user = Profile(
         email=request.email,
         name=request.name,
@@ -144,7 +155,6 @@ async def signup(request: SignupRequest, db: AsyncSession = Depends(get_db)):
     await db.commit()
     await db.refresh(new_user)
     
-    # Create token
     token = create_access_token({"sub": str(new_user.id), "role": new_user.role})
     
     return {
@@ -159,14 +169,12 @@ async def signup(request: SignupRequest, db: AsyncSession = Depends(get_db)):
 
 @api_router.post("/auth/login", response_model=TokenResponse)
 async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
-    # Find user
     result = await db.execute(select(Profile).where(Profile.email == request.email))
     user = result.scalar_one_or_none()
     
     if not user or not verify_password(request.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
-    # Create token
     token = create_access_token({"sub": str(user.id), "role": user.role})
     
     return {
@@ -188,7 +196,7 @@ async def get_me(current_user: Profile = Depends(get_current_user)):
         "role": current_user.role
     }
 
-# Impact logs routes (Protected - Require Authentication)
+# --- Impact Logs Routes ---
 @api_router.post("/impact-logs", response_model=ImpactLogResponse)
 async def create_impact_log(request: ImpactLogCreate, current_user: Profile = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     new_log = ImpactLog(
@@ -217,38 +225,11 @@ async def create_impact_log(request: ImpactLogCreate, current_user: Profile = De
         "category": new_log.category,
         "description": new_log.description,
         "status": new_log.status,
-        "created_at": new_log.created_at
+        "created_at": str(new_log.created_at)
     }
-
-@api_router.get("/impact-logs/my-logs", response_model=List[ImpactLogResponse])
-async def get_my_logs(current_user: Profile = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(ImpactLog)
-        .where(ImpactLog.user_id == current_user.id)
-        .order_by(ImpactLog.created_at.desc())
-    )
-    logs = result.scalars().all()
-    
-    return [
-        {
-            "id": str(log.id),
-            "user_id": str(log.user_id),
-            "name": log.name,
-            "locality": log.locality,
-            "gps_latitude": float(log.gps_latitude),
-            "gps_longitude": float(log.gps_longitude),
-            "impact_date": str(log.impact_date),
-            "category": log.category,
-            "description": log.description,
-            "status": log.status,
-            "created_at": log.created_at
-        }
-        for log in logs
-    ]
 
 @api_router.get("/impact-logs/all", response_model=List[ImpactLogResponse])
 async def get_all_logs(current_user: Profile = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    # Check if admin
     if current_user.role != 'admin':
         raise HTTPException(status_code=403, detail="Admin access required")
     
@@ -271,7 +252,7 @@ async def get_all_logs(current_user: Profile = Depends(get_current_user), db: As
             "category": log.category,
             "description": log.description,
             "status": log.status,
-            "created_at": log.created_at,
+            "created_at": str(log.created_at),
             "profile": {
                 "name": profile.name,
                 "email": profile.email
@@ -287,18 +268,15 @@ async def update_log_status(
     current_user: Profile = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    # Check if admin
     if current_user.role != 'admin':
         raise HTTPException(status_code=403, detail="Admin access required")
     
-    # Find log
     result = await db.execute(select(ImpactLog).where(ImpactLog.id == log_id))
     log = result.scalar_one_or_none()
     
     if not log:
         raise HTTPException(status_code=404, detail="Log not found")
     
-    # Update status
     log.status = status_update.status
     await db.commit()
     await db.refresh(log)
@@ -314,16 +292,12 @@ async def update_log_status(
         "category": log.category,
         "description": log.description,
         "status": log.status,
-        "created_at": log.created_at
+        "created_at": str(log.created_at)
     }
 
-# PUBLIC ENDPOINTS (No Authentication Required) - FOR LIVE MAPS
+# --- Public Endpoints ---
 @api_router.get("/public/impact-logs", response_model=List[ImpactLogResponse])
 async def get_public_logs(db: AsyncSession = Depends(get_db)):
-    """
-    Public endpoint to view all impact logs with location data
-    This is used by Live Maps page
-    """
     try:
         result = await db.execute(
             select(ImpactLog)
@@ -344,7 +318,7 @@ async def get_public_logs(db: AsyncSession = Depends(get_db)):
                 "category": log.category,
                 "description": log.description,
                 "status": log.status,
-                "created_at": log.created_at
+                "created_at": str(log.created_at)
             }
             for log in logs
         ]
@@ -352,61 +326,5 @@ async def get_public_logs(db: AsyncSession = Depends(get_db)):
         logger.error(f"Error fetching public logs: {e}")
         return []
 
-@api_router.get("/public/stats")
-async def get_public_stats(db: AsyncSession = Depends(get_db)):
-    """
-    Public endpoint for statistics
-    Used by Impact Stats page
-    """
-    try:
-        result = await db.execute(select(ImpactLog))
-        all_logs = result.scalars().all()
-        
-        total = len(all_logs)
-        solving = len([l for l in all_logs if l.status == 'Solving'])
-        solved = len([l for l in all_logs if l.status == 'Solved'])
-        fake = len([l for l in all_logs if l.status == 'Fake'])
-        
-        # Category breakdown
-        categories = {}
-        for log in all_logs:
-            categories[log.category] = categories.get(log.category, 0) + 1
-        
-        return {
-            "total_reports": total,
-            "solving": solving,
-            "solved": solved,
-            "fake": fake,
-            "categories": categories,
-            "resolution_rate": round((solved / total * 100) if total > 0 else 0, 1)
-        }
-    except Exception as e:
-        logger.error(f"Error fetching stats: {e}")
-        return {
-            "total_reports": 0,
-            "solving": 0,
-            "solved": 0,
-            "fake": 0,
-            "categories": {},
-            "resolution_rate": 0
-        }
-
-# Include router
+# Include the router in the main app
 app.include_router(api_router)
-
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
