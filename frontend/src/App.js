@@ -13,6 +13,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import LiveMaps from './pages/LiveMaps';
 import ImpactStats from './pages/ImpactStats';
 import CommunityActivity from './pages/CommunityActivity';
+import 'leaflet/dist/leaflet.css';
 
 function App() {
   return (
