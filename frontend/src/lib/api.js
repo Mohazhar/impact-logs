@@ -1,17 +1,23 @@
 import axios from 'axios';
 
-// Fallback to localhost:8000 if the environment variable is missing
-const API_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8000';
+/**
+ * Senior Developer Fix: Unified Deployment Strategy
+ * Since we are using a single vercel.json for both frontend and backend,
+ * we use a relative path. This eliminates CORS issues and double slashes.
+ */
+const API_URL = process.env.NODE_ENV === 'production' 
+  ? '' // In production, same-domain requests use an empty string
+  : 'http://localhost:8000'; // Development fallback
 
 const api = axios.create({
-  // This ensures the base is always a valid URL
+  // baseURL is now just '/api' for production efficiency
   baseURL: `${API_URL}/api`,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Add token to requests
+// Add token to requests using Interceptors
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -25,12 +31,11 @@ api.interceptors.request.use(
   }
 );
 
-// Handle response errors
+// Handle response errors (e.g., Token expiration)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid
       localStorage.removeItem('token');
       const publicPaths = ['/login', '/signup', '/admin-login', '/'];
       if (!publicPaths.includes(window.location.pathname)) {
@@ -41,11 +46,10 @@ api.interceptors.response.use(
   }
 );
 
-// Auth API
+// --- Auth API ---
 export const authAPI = {
   signup: async (email, password, name) => {
-    // Note: removed unnecessary try/catch blocks because the interceptor 
-    // and the calling component usually handle the error display.
+    // Endpoints are now cleaner and relative
     const { data } = await api.post('/auth/signup', { email, password, name });
     return data;
   },
@@ -59,7 +63,7 @@ export const authAPI = {
   },
 };
 
-// Impact Logs API
+// --- Impact Logs API ---
 export const impactLogsAPI = {
   create: async (logData) => {
     const { data } = await api.post('/impact-logs', logData);
@@ -74,6 +78,7 @@ export const impactLogsAPI = {
     return data;
   },
   updateStatus: async (logId, status) => {
+    // PATCH request for administrative status updates
     const { data } = await api.patch(`/impact-logs/${logId}/status`, { status });
     return data;
   },
