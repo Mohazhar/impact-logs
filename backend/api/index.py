@@ -32,7 +32,7 @@ JWT_EXPIRE_MINUTES = int(os.environ.get('JWT_EXPIRE_MINUTES', '1440'))
 security = HTTPBearer()
 
 # Create the main app
-app = FastAPI()
+aapp = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
