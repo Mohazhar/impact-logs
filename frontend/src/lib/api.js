@@ -70,9 +70,9 @@ export const impactLogsAPI = {
     return data;
   },
   getMyLogs: async () => {
-    const { data } = await api.get('/impact-logs/my-logs');
-    return data;
-  },
+  const { data } = await api.get('/impact-logs/my-logs'); // No '/api' here if baseURL already includes it
+  return data;
+},
   getAllLogs: async () => {
     const { data } = await api.get('/impact-logs/all');
     return data;

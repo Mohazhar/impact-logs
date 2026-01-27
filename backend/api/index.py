@@ -17,7 +17,7 @@ from passlib.context import CryptContext
 from .database import get_db
 from .models import Profile, ImpactLog
 
-# Setup logging for production debugging
+# Setup logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -27,25 +27,25 @@ logger = logging.getLogger(__name__)
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# Password hashing configuration
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# JWT and Secret settings
 JWT_SECRET = os.environ.get('JWT_SECRET', 'your-secret-key')
 JWT_ALGORITHM = os.environ.get('JWT_ALGORITHM', 'HS256')
 JWT_EXPIRE_MINUTES = int(os.environ.get('JWT_EXPIRE_MINUTES', '1440'))
 
 security = HTTPBearer()
 
-# Create the main FastAPI instance
-app = FastAPI(title="Local Impact Log API")
+# --- SENIOR DEVELOPER FIX: Disable redirect_slashes ---
+# This stops FastAPI from sending 308 redirects on // which prevents CORS blocks
+app = FastAPI(title="Local Impact Log API", redirect_slashes=False)
 
-# Senior Developer Fix: Explicit CORS configuration to prevent redirect errors
-# Pull origins from environment or default to your known Vercel domains
-ALLOWED_ORIGINS = os.environ.get(
+# Explicit CORS configuration
+raw_origins = os.environ.get(
     'CORS_ORIGINS', 
-    'https://impact-logs-five.vercel.app,https://impact-logs-vant.vercel.app,http://localhost:3000,http://localhost:5173'
+    'https://impact-logs-five.vercel.app,https://impact-logs-vant.vercel.app,http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173'
 ).split(',')
+
+ALLOWED_ORIGINS = [origin.strip() for origin in raw_origins if origin.strip()]
 
 app.add_middleware(
     CORSMiddleware,
@@ -55,15 +55,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Root endpoint for Vercel deployment health check
 @app.get("/")
 def root():
     return {"status": "Backend active", "timestamp": str(datetime.now())}
 
-# Create API router for versioned or grouped routes
 api_router = APIRouter(prefix="/api")
 
-# --- Pydantic Data Models (Schemas) ---
+# --- Pydantic Data Models ---
 class SignupRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6)
@@ -109,7 +107,25 @@ class ImpactLogResponse(BaseModel):
 class StatusUpdate(BaseModel):
     status: str
 
-# --- Security & Auth Helper Functions ---
+# --- Helper for Log Serialization ---
+def serialize_log(log, profile=None):
+    """Safely converts SQL Alchemy log objects to serializable dicts"""
+    return {
+        "id": str(log.id),
+        "user_id": str(log.user_id),
+        "name": log.name,
+        "locality": log.locality,
+        "gps_latitude": float(log.gps_latitude),
+        "gps_longitude": float(log.gps_longitude),
+        "impact_date": log.impact_date.isoformat() if hasattr(log.impact_date, 'isoformat') else str(log.impact_date),
+        "category": log.category,
+        "description": log.description,
+        "status": log.status,
+        "created_at": log.created_at.isoformat() if hasattr(log.created_at, 'isoformat') else str(log.created_at),
+        "profile": {"name": profile.name, "email": profile.email} if profile else None
+    }
+
+# --- Security & Auth Helpers ---
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
@@ -128,206 +144,125 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         user_id = payload.get("sub")
         if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid token: missing subject")
+            raise HTTPException(status_code=401, detail="Invalid token")
         
         result = await db.execute(select(Profile).where(Profile.id == user_id))
         user = result.scalar_one_or_none()
         if not user:
-            raise HTTPException(status_code=401, detail="User associated with token not found")
-        
+            raise HTTPException(status_code=401, detail="User not found")
         return user
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Authentication token has expired")
-    except jwt.PyJWTError: 
+    except Exception:
         raise HTTPException(status_code=401, detail="Invalid authentication token")
 
-# --- Authentication Endpoints ---
+# --- Endpoints ---
+
 @api_router.post("/auth/signup", response_model=TokenResponse)
 async def signup(request: SignupRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Profile).where(Profile.email == request.email))
     if result.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="An account with this email already exists")
+        raise HTTPException(status_code=400, detail="Account already exists")
     
-    new_user = Profile(
-        email=request.email,
-        name=request.name,
-        password_hash=hash_password(request.password),
-        role='user'
-    )
+    new_user = Profile(email=request.email, name=request.name, password_hash=hash_password(request.password), role='user')
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
     
     token = create_access_token({"sub": str(new_user.id), "role": new_user.role})
-    
-    return {
-        "token": token,
-        "user": {
-            "id": str(new_user.id),
-            "email": new_user.email,
-            "name": new_user.name,
-            "role": new_user.role
-        }
-    }
+    return {"token": token, "user": {"id": str(new_user.id), "email": new_user.email, "name": new_user.name, "role": new_user.role}}
 
 @api_router.post("/auth/login", response_model=TokenResponse)
 async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Profile).where(Profile.email == request.email))
     user = result.scalar_one_or_none()
-    
     if not user or not verify_password(request.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
     token = create_access_token({"sub": str(user.id), "role": user.role})
-    
-    return {
-        "token": token,
-        "user": {
-            "id": str(user.id),
-            "email": user.email,
-            "name": user.name,
-            "role": user.role
-        }
-    }
+    return {"token": token, "user": {"id": str(user.id), "email": user.email, "name": user.name, "role": user.role}}
 
 @api_router.get("/auth/me", response_model=ProfileResponse)
 async def get_me(current_user: Profile = Depends(get_current_user)):
-    return {
-        "id": str(current_user.id),
-        "email": current_user.email,
-        "name": current_user.name,
-        "role": current_user.role
-    }
+    return {"id": str(current_user.id), "email": current_user.email, "name": current_user.name, "role": current_user.role}
 
-# --- Protected Impact Log Endpoints ---
+@api_router.get("/impact-logs/my-logs", response_model=List[ImpactLogResponse])
+async def get_my_logs(current_user: Profile = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    try:
+        result = await db.execute(select(ImpactLog).where(ImpactLog.user_id == current_user.id).order_by(ImpactLog.created_at.desc()))
+        logs = result.scalars().all()
+        return [serialize_log(log) for log in logs]
+    except Exception as e:
+        logger.error(f"Error in get_my_logs: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 @api_router.post("/impact-logs", response_model=ImpactLogResponse)
 async def create_impact_log(request: ImpactLogCreate, current_user: Profile = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     new_log = ImpactLog(
-        user_id=current_user.id,
-        name=request.name,
-        locality=request.locality,
-        gps_latitude=request.gps_latitude,
-        gps_longitude=request.gps_longitude,
-        impact_date=request.impact_date,
-        category=request.category,
-        description=request.description,
-        status='Solving'
+        user_id=current_user.id, name=request.name, locality=request.locality,
+        gps_latitude=request.gps_latitude, gps_longitude=request.gps_longitude,
+        impact_date=request.impact_date, category=request.category, description=request.description, status='Solving'
     )
     db.add(new_log)
     await db.commit()
     await db.refresh(new_log)
-    
-    return {
-        "id": str(new_log.id),
-        "user_id": str(new_log.user_id),
-        "name": new_log.name,
-        "locality": new_log.locality,
-        "gps_latitude": float(new_log.gps_latitude),
-        "gps_longitude": float(new_log.gps_longitude),
-        "impact_date": str(new_log.impact_date),
-        "category": new_log.category,
-        "description": new_log.description,
-        "status": new_log.status,
-        "created_at": str(new_log.created_at)
-    }
+    return serialize_log(new_log)
 
 @api_router.get("/impact-logs/all", response_model=List[ImpactLogResponse])
 async def get_all_logs(current_user: Profile = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     if current_user.role != 'admin':
-        raise HTTPException(status_code=403, detail="Administrative privileges required")
+        raise HTTPException(status_code=403, detail="Admin only")
     
-    result = await db.execute(
-        select(ImpactLog, Profile)
-        .join(Profile, ImpactLog.user_id == Profile.id)
-        .order_by(ImpactLog.created_at.desc())
-    )
+    result = await db.execute(select(ImpactLog, Profile).join(Profile, ImpactLog.user_id == Profile.id).order_by(ImpactLog.created_at.desc()))
     rows = result.all()
-    
-    return [
-        {
-            "id": str(log.id),
-            "user_id": str(log.user_id),
-            "name": log.name,
-            "locality": log.locality,
-            "gps_latitude": float(log.gps_latitude),
-            "gps_longitude": float(log.gps_longitude),
-            "impact_date": str(log.impact_date),
-            "category": log.category,
-            "description": log.description,
-            "status": log.status,
-            "created_at": str(log.created_at),
-            "profile": {
-                "name": profile.name,
-                "email": profile.email
-            }
-        }
-        for log, profile in rows
-    ]
+    return [serialize_log(log, profile) for log, profile in rows]
 
 @api_router.patch("/impact-logs/{log_id}/status", response_model=ImpactLogResponse)
-async def update_log_status(
-    log_id: str,
-    status_update: StatusUpdate,
-    current_user: Profile = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
+async def update_log_status(log_id: str, status_update: StatusUpdate, current_user: Profile = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     if current_user.role != 'admin':
-        raise HTTPException(status_code=403, detail="Administrative privileges required")
+        raise HTTPException(status_code=403, detail="Admin only")
     
     result = await db.execute(select(ImpactLog).where(ImpactLog.id == log_id))
     log = result.scalar_one_or_none()
-    
     if not log:
-        raise HTTPException(status_code=404, detail="Impact log record not found")
+        raise HTTPException(status_code=404, detail="Log not found")
     
     log.status = status_update.status
     await db.commit()
     await db.refresh(log)
-    
-    return {
-        "id": str(log.id),
-        "user_id": str(log.user_id),
-        "name": log.name,
-        "locality": log.locality,
-        "gps_latitude": float(log.gps_latitude),
-        "gps_longitude": float(log.gps_longitude),
-        "impact_date": str(log.impact_date),
-        "category": log.category,
-        "description": log.description,
-        "status": log.status,
-        "created_at": str(log.created_at)
-    }
+    return serialize_log(log)
 
-# --- Public Map Endpoints (No Auth Required) ---
 @api_router.get("/public/impact-logs", response_model=List[ImpactLogResponse])
 async def get_public_logs(db: AsyncSession = Depends(get_db)):
     try:
-        result = await db.execute(
-            select(ImpactLog)
-            .order_by(ImpactLog.created_at.desc())
-            .limit(500)
-        )
+        result = await db.execute(select(ImpactLog).order_by(ImpactLog.created_at.desc()).limit(500))
         logs = result.scalars().all()
-        
-        return [
-            {
-                "id": str(log.id),
-                "user_id": str(log.user_id),
-                "name": log.name,
-                "locality": log.locality,
-                "gps_latitude": float(log.gps_latitude),
-                "gps_longitude": float(log.gps_longitude),
-                "impact_date": str(log.impact_date),
-                "category": log.category,
-                "description": log.description,
-                "status": log.status,
-                "created_at": str(log.created_at)
-            }
-            for log in logs
-        ]
+        return [serialize_log(log) for log in logs]
     except Exception as e:
-        logger.error(f"Error fetching public map logs: {e}")
+        logger.error(f"Error fetching logs: {e}")
         return []
 
-# Final Step: Include the unified router into the main app instance
+@api_router.get("/public/stats")
+async def get_impact_stats(db: AsyncSession = Depends(get_db)):
+    try:
+        result = await db.execute(select(ImpactLog))
+        logs = result.scalars().all()
+        
+        total = len(logs)
+        solved = len([l for l in logs if l.status == 'Solved'])
+        solving = len([l for l in logs if l.status == 'Solving'])
+        
+        categories = {}
+        for l in logs:
+            categories[l.category] = categories.get(l.category, 0) + 1
+            
+        return {
+            "total_reports": total,
+            "solved": solved,
+            "solving": solving,
+            "resolution_rate": round((solved / total * 100), 1) if total > 0 else 0,
+            "categories": categories
+        }
+    except Exception as e:
+        logger.error(f"Stats generation error: {e}")
+        raise HTTPException(status_code=500, detail="Database error during aggregation")
+
 app.include_router(api_router)

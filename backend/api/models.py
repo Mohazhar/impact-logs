@@ -1,7 +1,7 @@
 from sqlalchemy import Column, String, Numeric, Date, ForeignKey, CheckConstraint, Index, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from database import Base
+from .database import Base
 from datetime import datetime, timezone
 
 class Profile(Base):

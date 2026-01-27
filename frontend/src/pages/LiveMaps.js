@@ -1,11 +1,36 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MapPin, Navigation, ArrowLeft, Layers, Filter } from 'lucide-react';
+import { MapPin, Navigation, ArrowLeft, Filter, Loader2, Info } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import axios from 'axios';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import api from '../../src/lib/api';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+// Fix for default Leaflet marker icons
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+
+let DefaultIcon = L.icon({
+  iconUrl: markerIcon,
+  shadowUrl: markerShadow,
+  iconSize: [25, 41],
+  iconAnchor: [12, 41]
+});
+L.Marker.prototype.options.icon = DefaultIcon;
+
+// Helper Component to auto-center map when logs change
+function MapRecenter({ logs }) {
+  const map = useMap();
+  useEffect(() => {
+    if (logs.length > 0) {
+      const bounds = L.latLngBounds(logs.map(log => [log.gps_latitude, log.gps_longitude]));
+      map.fitBounds(bounds, { padding: [50, 50] });
+    }
+  }, [logs, map]);
+  return null;
+}
 
 export default function LiveMaps() {
   const navigate = useNavigate();
@@ -15,10 +40,9 @@ export default function LiveMaps() {
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [selectedLog, setSelectedLog] = useState(null);
 
-  // Senior Developer Move: Memoize the fetch function to stabilize dependencies
   const fetchLogs = useCallback(async () => {
     try {
-      const { data } = await axios.get(`${API_URL}/api/public/impact-logs`);
+      const { data } = await api.get('/public/impact-logs');
       setLogs(data);
     } catch (error) {
       console.error('Error fetching logs:', error);
@@ -29,19 +53,14 @@ export default function LiveMaps() {
 
   useEffect(() => {
     fetchLogs();
-    const interval = setInterval(fetchLogs, 10000);
+    const interval = setInterval(fetchLogs, 30000);
     return () => clearInterval(interval);
-  }, [fetchLogs]); // Satisfies exhaustive-deps linting rule
+  }, [fetchLogs]);
 
-  // Logic Optimization: Use useMemo for filtering to prevent heavy re-calculations
   const filteredLogs = useMemo(() => {
     let filtered = [...logs];
-    if (selectedCategory !== 'All') {
-      filtered = filtered.filter(log => log.category === selectedCategory);
-    }
-    if (selectedStatus !== 'All') {
-      filtered = filtered.filter(log => log.status === selectedStatus);
-    }
+    if (selectedCategory !== 'All') filtered = filtered.filter(log => log.category === selectedCategory);
+    if (selectedStatus !== 'All') filtered = filtered.filter(log => log.status === selectedStatus);
     return filtered;
   }, [logs, selectedCategory, selectedStatus]);
 
@@ -54,211 +73,175 @@ export default function LiveMaps() {
     }
   };
 
+  // Custom marker function
+  const createCustomIcon = (status) => {
+    let color = '#f59e0b'; // Default amber
+    if (status === 'Solved') color = '#059669';
+    if (status === 'Fake') color = '#ef4444';
+
+    return L.divIcon({
+      className: 'custom-div-icon',
+      html: `<div style="background-color: ${color}; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>`,
+      iconSize: [12, 12],
+      iconAnchor: [6, 6]
+    });
+  };
+
   return (
-    <div className="min-h-screen bg-stone-50 selection:bg-emerald-100">
+    <div className="min-h-screen bg-stone-50 font-sans">
       {/* Navbar */}
-      <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-stone-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => navigate('/')}
-                className="group flex items-center gap-2 text-slate-600 hover:text-emerald-700 transition-all text-sm font-semibold"
-              >
-                <ArrowLeft className="h-4 w-4 group-hover:-translate-x-1 transition-transform" />
-                <span>Home</span>
-              </button>
-              <div className="h-4 w-px bg-stone-200 hidden sm:block" />
-              <div className="flex items-center gap-2">
-                <Navigation className="h-5 w-5 text-emerald-700" />
-                <span className="text-lg font-black text-slate-800 tracking-tight" style={{ fontFamily: 'Outfit' }}>Live Maps</span>
-              </div>
+      <nav className="sticky top-0 z-[1000] bg-white/80 backdrop-blur-md border-b h-16 flex items-center">
+        <div className="max-w-7xl mx-auto px-4 w-full flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <button onClick={() => navigate('/')} className="flex items-center gap-2 text-slate-600 hover:text-emerald-700 font-bold text-sm">
+              <ArrowLeft className="h-4 w-4" /> Home
+            </button>
+            <div className="flex items-center gap-2 border-l pl-4">
+              <Navigation className="h-5 w-5 text-emerald-700" />
+              <span className="text-lg font-black text-slate-800 tracking-tight">Live Impact Map</span>
             </div>
-            <div className="flex items-center gap-2">
-              <Button onClick={() => navigate('/login')} variant="ghost" className="text-sm font-bold">Login</Button>
-              <Button onClick={() => navigate('/signup')} className="bg-emerald-700 hover:bg-slate-900 text-white rounded-full px-5 text-sm font-bold shadow-md transition-all">Join Movement</Button>
-            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={() => navigate('/login')} variant="ghost" className="font-bold">Login</Button>
+            <Button onClick={() => navigate('/signup')} className="bg-emerald-700 hover:bg-emerald-800 text-white rounded-full font-bold">Join</Button>
           </div>
         </div>
       </nav>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        {/* Header Section */}
-        <div className="mb-10">
-          <h1 className="text-3xl sm:text-4xl font-black text-slate-900 mb-3 tracking-tight" style={{ fontFamily: 'Outfit' }}>
-            Impact Visualizer
-          </h1>
-          <p className="text-base text-slate-500 max-w-2xl font-medium">
-            Real-time geospatial intelligence tracking infrastructure restoration and community reports.
-          </p>
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="mb-6 flex flex-col md:flex-row justify-between items-end gap-4">
+          <div>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight">Geospatial Intelligence</h1>
+            <p className="text-slate-500 font-medium">Tracking real-world restorations across the region.</p>
+          </div>
+          
+          <div className="bg-white p-2 rounded-2xl border shadow-sm flex items-center gap-4 w-full md:w-auto">
+            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <SelectTrigger className="w-[160px] border-none bg-stone-50 font-bold">
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Sectors</SelectItem>
+                <SelectItem value="Road">Roads</SelectItem>
+                <SelectItem value="Water">Water Supply</SelectItem>
+                <SelectItem value="Electricity">Electricity</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+              <SelectTrigger className="w-[160px] border-none bg-stone-50 font-bold">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Status</SelectItem>
+                <SelectItem value="Solving">In Progress</SelectItem>
+                <SelectItem value="Solved">Resolved</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
-        {/* Filter Controls */}
-        <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-6 mb-8">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div className="flex items-center gap-3">
-               <div className="bg-emerald-50 p-2 rounded-lg">
-                  <Filter className="h-5 w-5 text-emerald-700" />
-               </div>
-               <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Global Filters</h3>
-            </div>
+        <div className="grid lg:grid-cols-4 gap-6">
+          {/* Real Map Section */}
+          <div className="lg:col-span-3 bg-white rounded-3xl border shadow-xl overflow-hidden h-[650px] relative z-0">
+            {loading && (
+              <div className="absolute inset-0 z-[1001] bg-white/60 backdrop-blur-sm flex flex-col items-center justify-center">
+                <Loader2 className="h-10 w-10 text-emerald-600 animate-spin" />
+                <span className="mt-2 font-bold text-slate-600 uppercase text-xs">Loading Live Data...</span>
+              </div>
+            )}
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1 max-w-2xl">
-              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger className="bg-stone-50 border-none rounded-xl h-11 text-sm font-bold text-slate-700">
-                  <SelectValue placeholder="Category" />
-                </SelectTrigger>
-                <SelectContent className="rounded-xl border-stone-100">
-                  <SelectItem value="All">All Categories</SelectItem>
-                  <SelectItem value="Road">Road Restorations</SelectItem>
-                  <SelectItem value="Water">Water Supply</SelectItem>
-                  <SelectItem value="Sanitation">Sanitation</SelectItem>
-                  <SelectItem value="Electricity">Electricity Grid</SelectItem>
-                  <SelectItem value="Other">Miscellaneous</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                <SelectTrigger className="bg-stone-50 border-none rounded-xl h-11 text-sm font-bold text-slate-700">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent className="rounded-xl border-stone-100">
-                  <SelectItem value="All">All Statuses</SelectItem>
-                  <SelectItem value="Solving">In Progress</SelectItem>
-                  <SelectItem value="Solved">Completed Fixes</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="hidden lg:block text-right">
-                <span className="text-2xl font-black text-emerald-700 block">{filteredLogs.length}</span>
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Active Nodes</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Intelligence Grid */}
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* Map Interaction Area */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white rounded-[2rem] shadow-xl border border-stone-100 p-4 overflow-hidden h-[600px] relative">
-              <div className="absolute top-8 left-8 z-10">
-                <div className="bg-white/90 backdrop-blur px-3 py-1.5 rounded-lg border border-stone-200 shadow-sm flex items-center gap-2">
-                   <Layers className="h-4 w-4 text-emerald-700" />
-                   <span className="text-[10px] font-black uppercase text-slate-600 tracking-widest">Satellite Layer Active</span>
-                </div>
-              </div>
-
-              <div className="relative w-full h-full bg-slate-50 rounded-[1.5rem] overflow-hidden">
-                {/* Background Grid for Tech look */}
-                <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 1px)', backgroundSize: '30px 30px' }}></div>
-                
-                <div className="absolute inset-0 p-10">
-                  {filteredLogs.map((log) => (
-                    <div
-                      key={log.id}
-                      onClick={() => setSelectedLog(log)}
-                      className={`absolute inline-flex items-center gap-2 px-3 py-1.5 rounded-full cursor-pointer transition-all duration-500 shadow-lg ${
-                        selectedLog?.id === log.id
-                          ? 'bg-slate-900 text-white scale-110 z-20 ring-4 ring-emerald-400/30'
-                          : `${getStatusColor(log.status)} text-white hover:scale-110 hover:z-10`
-                      }`}
-                      style={{
-                        left: `${((log.gps_longitude + 180) / 360) * 100}%`,
-                        top: `${((90 - log.gps_latitude) / 180) * 100}%`,
-                      }}
-                    >
-                      <MapPin className="h-3 w-3" />
-                      <span className="text-[10px] font-black uppercase tracking-tight">{log.category}</span>
-                    </div>
-                  ))}
-                  
-                  {filteredLogs.length === 0 && (
-                    <div className="flex flex-col items-center justify-center h-full">
-                      <MapPin className="h-12 w-12 text-stone-200 mb-2" />
-                      <p className="text-stone-400 text-sm font-bold uppercase tracking-widest italic">No Data Nodes Found</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Legend Component */}
-            <div className="flex items-center gap-8 px-8 py-4 bg-white rounded-2xl border border-stone-100 shadow-sm w-fit">
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-sm"></div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest tracking-widest">In Progress</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-emerald-600 shadow-sm"></div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Resolved</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-sm"></div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Flagged</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Context Panel */}
-          <div className="lg:col-span-1 space-y-6">
-            <div className="bg-white rounded-[2rem] shadow-xl border border-stone-100 p-8 h-full sticky top-24">
-              <h3 className="text-xl font-bold text-slate-900 mb-8 tracking-tight" style={{ fontFamily: 'Outfit' }}>Node Context</h3>
+            <MapContainer 
+              center={[11.0168, 76.9558]} // Default Coimbatore center
+              zoom={13} 
+              style={{ height: '100%', width: '100%' }}
+              zoomControl={false}
+            >
+              {/* Professional Dark/Clean Map Theme */}
+              <TileLayer
+                url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              />
               
+              <MapRecenter logs={filteredLogs} />
+
+              {filteredLogs.map((log) => (
+                <Marker 
+                  key={log.id} 
+                  position={[log.gps_latitude, log.gps_longitude]}
+                  icon={createCustomIcon(log.status)}
+                  eventHandlers={{
+                    click: () => setSelectedLog(log),
+                  }}
+                >
+                  <Popup>
+                    <div className="font-sans p-1">
+                      <p className="font-bold text-slate-900">{log.name}</p>
+                      <p className="text-[10px] uppercase font-black text-emerald-600">{log.category}</p>
+                    </div>
+                  </Popup>
+                </Marker>
+              ))}
+            </MapContainer>
+
+            {/* Floating Legend */}
+            <div className="absolute bottom-6 left-6 z-[1000] bg-white/90 backdrop-blur p-3 rounded-xl border shadow-lg flex gap-4">
+               <div className="flex items-center gap-2">
+                 <div className="w-2 h-2 rounded-full bg-amber-500" />
+                 <span className="text-[10px] font-bold uppercase tracking-widest">In Progress</span>
+               </div>
+               <div className="flex items-center gap-2 border-l pl-4">
+                 <div className="w-2 h-2 rounded-full bg-emerald-600" />
+                 <span className="text-[10px] font-bold uppercase tracking-widest">Resolved</span>
+               </div>
+            </div>
+          </div>
+
+          {/* Details Sidebar */}
+          <div className="lg:col-span-1 space-y-4">
+            <div className="bg-white rounded-3xl border shadow-xl p-6 h-full min-h-[400px]">
+              <div className="flex items-center gap-2 mb-6 border-b pb-4">
+                 <Info className="h-5 w-5 text-slate-400" />
+                 <h2 className="font-bold text-slate-800">Node Intelligence</h2>
+              </div>
+
               {selectedLog ? (
-                <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
-                  <div className="space-y-4">
-                    <h4 className="text-3xl font-black text-slate-900 leading-[1.1] tracking-tighter" style={{ fontFamily: 'Outfit' }}>
-                      {selectedLog.name}
-                    </h4>
-                    <span className={`inline-block px-3 py-1 rounded-md text-[10px] font-black uppercase tracking-widest text-white shadow-sm ${getStatusColor(selectedLog.status)}`}>
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <div>
+                    <h3 className="text-2xl font-black text-slate-900 leading-tight mb-2">{selectedLog.name}</h3>
+                    <div className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase text-white ${getStatusColor(selectedLog.status)}`}>
                       {selectedLog.status}
-                    </span>
+                    </div>
                   </div>
 
-                  <div className="space-y-6">
-                     <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-stone-50 p-3 rounded-xl border border-stone-100">
-                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Sector</p>
-                           <p className="text-sm font-bold text-slate-700">{selectedLog.category}</p>
-                        </div>
-                        <div className="bg-stone-50 p-3 rounded-xl border border-stone-100">
-                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Timestamp</p>
-                           <p className="text-sm font-bold text-slate-700">{selectedLog.impact_date}</p>
-                        </div>
-                     </div>
+                  <div className="space-y-4">
+                    <div className="bg-stone-50 p-4 rounded-2xl border border-stone-100">
+                      <p className="text-[9px] font-black text-slate-400 uppercase mb-2">Detailed Narrative</p>
+                      <p className="text-sm leading-relaxed text-slate-600 font-medium italic">"{selectedLog.description}"</p>
+                    </div>
 
-                     <div className="space-y-2">
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Observation Site</p>
-                        <p className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                           <MapPin className="h-4 w-4 text-emerald-600" />
-                           {selectedLog.locality}
-                        </p>
-                     </div>
-
-                     <div className="space-y-2">
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">GPS Telemetry</p>
-                        <p className="text-xs font-mono text-slate-500 bg-stone-50 p-3 rounded-xl border border-stone-100 border-dashed">
-                          {selectedLog.gps_latitude.toFixed(6)}, {selectedLog.gps_longitude.toFixed(6)}
-                        </p>
-                     </div>
-
-                     <div className="space-y-3 pt-4 border-t border-stone-100">
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Field Narrative</p>
-                        <div className="text-sm text-slate-500 leading-relaxed italic border-l-4 border-emerald-500 pl-4 py-1">
-                          "{selectedLog.description}"
-                        </div>
-                     </div>
+                    <div className="grid grid-cols-1 gap-3">
+                      <div className="flex items-start gap-3">
+                         <MapPin className="h-4 w-4 text-emerald-600 mt-1" />
+                         <div>
+                           <p className="text-[9px] font-black text-slate-400 uppercase">Site Coordinates</p>
+                           <p className="text-xs font-mono font-bold text-slate-700">
+                             {selectedLog.gps_latitude.toFixed(4)}, {selectedLog.gps_longitude.toFixed(4)}
+                           </p>
+                         </div>
+                      </div>
+                    </div>
                   </div>
+
+                  <Button className="w-full bg-slate-900 text-white rounded-xl h-12 font-bold mt-4">
+                    Verify this Node
+                  </Button>
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center py-32 text-center">
-                  <div className="h-16 w-16 bg-stone-50 rounded-full flex items-center justify-center mb-6">
-                     <MapPin className="h-8 w-8 text-stone-200" />
-                  </div>
-                  <p className="text-stone-400 font-medium text-sm max-w-[180px] leading-relaxed italic">
-                    Select a data point on the map visualizer to load field details.
+                <div className="flex flex-col items-center justify-center py-20 text-center text-slate-300">
+                  <MapPin className="h-10 w-10 mb-4 opacity-20" />
+                  <p className="text-xs font-bold uppercase max-w-[150px] leading-relaxed">
+                    Click a map marker to view detailed field intelligence
                   </p>
                 </div>
               )}
