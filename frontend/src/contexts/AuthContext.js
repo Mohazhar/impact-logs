@@ -17,7 +17,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing token and fetch user
+    // Check for existing token and fetch user on mount
     const token = localStorage.getItem('token');
     if (token) {
       fetchCurrentUser();
@@ -29,30 +29,51 @@ export const AuthProvider = ({ children }) => {
   const fetchCurrentUser = async () => {
     try {
       const userData = await authAPI.getMe();
+      // Expecting { id, email, name, role }
       setProfile(userData);
-      setUser({ id: userData.id, email: userData.email });
+      setUser({ id: userData.id, email: userData.email, role: userData.role });
     } catch (error) {
       console.error('Error fetching user:', error);
-      localStorage.removeItem('token');
+      // Only remove token if the error is an Auth failure (401/403)
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        localStorage.removeItem('token');
+        setUser(null);
+        setProfile(null);
+      }
     } finally {
       setLoading(false);
     }
   };
 
   const signUp = async (email, password, name) => {
-    const data = await authAPI.signup(email, password, name);
-    localStorage.setItem('token', data.token);
-    setProfile(data.user);
-    setUser({ id: data.user.id, email: data.user.email });
-    return data;
+    try {
+      const data = await authAPI.signup(email, password, name);
+      // Backend returns { token, user: { id, email, name, role } }
+      localStorage.setItem('token', data.token);
+      setProfile(data.user);
+      setUser({ id: data.user.id, email: data.user.email, role: data.user.role });
+      return data;
+    } catch (error) {
+      console.error('Signup error in Context:', error);
+      throw error; // Rethrow so the UI can show the toast
+    }
   };
 
   const signIn = async (email, password) => {
-    const data = await authAPI.login(email, password);
-    localStorage.setItem('token', data.token);
-    setProfile(data.user);
-    setUser({ id: data.user.id, email: data.user.email });
-    return data;
+    try {
+      // Ensure the request is sent as a POST to /api/auth/login
+      const data = await authAPI.login(email, password);
+      
+      // Store token and update state
+      localStorage.setItem('token', data.token);
+      setProfile(data.user);
+      setUser({ id: data.user.id, email: data.user.email, role: data.user.role });
+      
+      return data;
+    } catch (error) {
+      console.error('SignIn error in Context:', error);
+      throw error; // Rethrow to trigger the catch block in LoginPage.js
+    }
   };
 
   const signOut = async () => {
@@ -68,6 +89,7 @@ export const AuthProvider = ({ children }) => {
     signUp,
     signIn,
     signOut,
+    refreshUser: fetchCurrentUser // Added so you can manually refresh user data
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

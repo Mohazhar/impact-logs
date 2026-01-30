@@ -15,7 +15,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [isTamil, setIsTamil] = useState(true);
 
-  // Content Strings with exact Tamil versions
+  // Content Strings
   const t = {
     back: isTamil ? "முகப்பிற்குச் செல்ல" : "Back to Home",
     title: isTamil ? "பயனர் உள்நுழைவு" : "User Login",
@@ -34,18 +34,32 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await signIn(email, password);
+      // The signIn function should be defined in your AuthContext.js
+      // Ensure the API_URL there is set to: https://impact-logs-three.vercel.app/api
+      await signIn(email.trim(), password);
+      
       toast.success(isTamil ? 'உள்நுழைவு வெற்றிகரமாக முடிந்தது!' : 'Login successful!');
       navigate('/dashboard');
     } catch (error) {
-      console.error('Login error:', error);
-      const errorMessage = error.response?.data?.detail || error.message || 'Login failed';
+      console.error('Full Login Error Context:', error);
       
-      if (errorMessage.includes('Invalid credentials') || errorMessage.includes('not found')) {
-        toast.error(isTamil ? 'கணக்கு கிடைக்கவில்லை. பதிவு பக்கத்திற்குச் செல்கிறது...' : 'Account not found. Redirecting to sign up...');
-        setTimeout(() => navigate('/signup'), 1500);
+      // Detailed error breakdown for debugging
+      const status = error.response?.status;
+      const detail = error.response?.data?.detail;
+
+      if (status === 405) {
+        toast.error("Server Configuration Error (405). Please contact admin.");
+      } else if (status === 401 || detail === "Invalid email or password") {
+        toast.error(isTamil ? 'தவறான மின்னஞ்சல் அல்லது கடவுச்சொல்' : 'Invalid email or password');
+      } else if (status === 500) {
+        toast.error("Database connection failed. Please try again later.");
       } else {
-        toast.error(errorMessage);
+        toast.error(detail || "Login failed. Check your connection.");
+      }
+      
+      // Logic for missing accounts
+      if (detail && (detail.includes('not found') || detail.includes('exists'))) {
+        setTimeout(() => navigate('/signup'), 2000);
       }
     } finally {
       setLoading(false);
@@ -53,7 +67,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-tvk-dark">
       <div className="w-full max-w-md">
         {/* Language Toggle */}
         <div className="flex justify-end mb-4">
@@ -67,7 +81,6 @@ export default function LoginPage() {
 
         <div className="bg-black/40 backdrop-blur-xl rounded-3xl border border-white/10 p-10 shadow-2xl">
           <button
-            data-testid="back-to-home-btn"
             onClick={() => navigate('/')}
             className="flex items-center gap-2 text-gray-400 hover:text-tvk-gold transition-colors mb-8 group"
           >
@@ -79,7 +92,7 @@ export default function LoginPage() {
             <div className="bg-tvk-gold p-2 rounded-full shadow-[0_0_15px_rgba(234,179,8,0.3)]">
               <MapPin className="h-6 w-6 text-tvk-dark" />
             </div>
-            <h1 className="text-2xl font-black text-white uppercase tracking-tight" style={{ fontFamily: 'Outfit' }}>
+            <h1 className="text-2xl font-black text-white uppercase tracking-tight">
               {t.title}
             </h1>
           </div>
@@ -91,7 +104,6 @@ export default function LoginPage() {
               </Label>
               <Input
                 id="email"
-                data-testid="login-email-input"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -107,7 +119,6 @@ export default function LoginPage() {
               </Label>
               <Input
                 id="password"
-                data-testid="login-password-input"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -118,7 +129,6 @@ export default function LoginPage() {
             </div>
 
             <Button
-              data-testid="login-submit-btn"
               type="submit"
               disabled={loading}
               className="w-full bg-tvk-gold hover:bg-yellow-400 text-tvk-dark h-14 rounded-3xl font-black uppercase tracking-[0.2em] shadow-lg shadow-yellow-500/10 transition-all active:scale-[0.98]"
@@ -131,7 +141,6 @@ export default function LoginPage() {
             <p className="text-gray-500 text-xs font-medium">
               {t.noAccount}{' '}
               <Link
-                data-testid="login-signup-link"
                 to="/signup"
                 className="text-tvk-gold hover:text-yellow-400 font-black uppercase tracking-widest ml-1 underline decoration-tvk-gold/30 underline-offset-4"
               >
@@ -141,7 +150,6 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Brand Slogan */}
         <p className="mt-8 text-center text-[10px] font-bold uppercase tracking-[0.4em] text-gray-600 italic">
           பிறப்பொக்கும் எல்லா உயிர்க்கும்
         </p>
