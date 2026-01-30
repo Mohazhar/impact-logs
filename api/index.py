@@ -44,19 +44,22 @@ security = HTTPBearer()
 # Initialize FastAPI app
 app = FastAPI(title="Impact Log API", redirect_slashes=False)
 
-# Enhanced CORS for Vercel and Local Development
-raw_origins = os.environ.get(
-    'CORS_ORIGINS', 
-    'http://localhost:3000,http://localhost:5173, https://impact-logs-three.vercel.app/'
-).split(',')
-ALLOWED_ORIGINS = [origin.strip() for origin in raw_origins if origin.strip()]
+# --- Explicit CORS Configuration ---
+# Add your NEW frontend URL to this list
+ALLOWED_ORIGINS = [
+    "https://impact-logs-l6hc.vercel.app",   # Your current frontend
+    "https://impact-logs-three.vercel.app",  # Your backend domain
+    "https://impact-logs-five.vercel.app",   # Other variants
+    "http://localhost:3000",                 # Local development
+    "http://localhost:5173"
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=ALLOWED_ORIGINS,           # Permission granted to these URLs
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],                     # Allows POST, GET, OPTIONS, etc.
+    allow_headers=["*"],                     # Allows Authorization headers
 )
 
 # --- Pydantic Schemas ---
