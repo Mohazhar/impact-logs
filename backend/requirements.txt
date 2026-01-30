@@ -8,3 +8,12 @@ passlib[bcrypt]
 PyJWT
 psycopg2-binary
 asyncpg
+fastapi
+uvicorn
+sqlalchemy[asyncio]
+aiosqlite
+python-jose[cryptography]
+passlib[bcrypt]
+pyjwt
+python-dotenv
+pydantic[email]
