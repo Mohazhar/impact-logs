@@ -48,8 +48,7 @@ app = FastAPI(title="Impact Log API", redirect_slashes=False)
 # Add your NEW frontend URL to this list
 ALLOWED_ORIGINS = [
     "https://impact-logs-l6hc.vercel.app",   # Your current frontend
-    "https://impact-logs-three.vercel.app",  # Your backend domain
-    "https://impact-logs-five.vercel.app",   # Other variants
+    "https://impact-logs-three.vercel.app",   # Other variants
     "http://localhost:3000",                 # Local development
     "http://localhost:5173"
 ]
