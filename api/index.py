@@ -12,28 +12,20 @@ from pathlib import Path
 from dotenv import load_dotenv
 import jwt
 from passlib.context import CryptContext
-# to find files in the same 'api' directory.
-from .database import get_db
-from .models import Profile, ImpactLog
-# Absolute imports for Vercel
-from database import get_db
-from models import Profile, ImpactLog
 
-# Import local modules - Using absolute imports for Vercel reliability
+# --- ROBUST IMPORT BLOCK ---
+# This ensures database and models are found regardless of the execution context
 try:
-    from api.database import get_db
-    from api.models import Profile, ImpactLog
-except ImportError:
     from .database import get_db
     from .models import Profile, ImpactLog
+except (ImportError, ValueError):
+    try:
+        from api.database import get_db
+        from api.models import Profile, ImpactLog
+    except ImportError:
+        from database import get_db
+        from models import Profile, ImpactLog
 
-# Use this to ensure it works both locally and on Vercel
-try:
-    from database import get_db
-    from models import Profile, ImpactLog
-except ImportError:
-    from api.database import get_db
-    from api.models import Profile, ImpactLog
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -44,18 +36,20 @@ load_dotenv(ROOT_DIR / '.env')
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# Security Config
 JWT_SECRET = os.environ.get('JWT_SECRET', 'your-secret-key')
 JWT_ALGORITHM = os.environ.get('JWT_ALGORITHM', 'HS256')
 JWT_EXPIRE_MINUTES = int(os.environ.get('JWT_EXPIRE_MINUTES', '1440'))
 
 security = HTTPBearer()
 
+# Initialize FastAPI
 app = FastAPI(title="Impact Log API", redirect_slashes=False)
 
-# Enhanced CORS for Vercel
+# Enhanced CORS for Vercel and Local Development
 raw_origins = os.environ.get(
     'CORS_ORIGINS', 
-    'https://impact-logs-five.vercel.app,https://impact-logs-vant.vercel.app,http://localhost:3000,http://localhost:5173'
+    'http://localhost:3000,http://localhost:5173'
 ).split(',')
 
 ALLOWED_ORIGINS = [origin.strip() for origin in raw_origins if origin.strip()]
@@ -68,7 +62,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Pydantic Schema ---
+# --- Pydantic Schemas ---
 class SignupRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6)
@@ -114,7 +108,7 @@ class ImpactLogResponse(BaseModel):
 class StatusUpdate(BaseModel):
     status: str
 
-# --- Helpers ---
+# --- Helper Functions ---
 def serialize_log(log, profile=None):
     return {
         "id": str(log.id),
@@ -159,11 +153,16 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid authentication token")
 
-app = FastAPI(title="Impact Log API")
-
+# --- Root Endpoint ---
 @app.get("/")
 async def root():
-    return {"status": "Backend active", "message": "Impact Log is running!"}
+    return {
+        "status": "Backend active", 
+        "message": "Impact Log is running!",
+        "timestamp": datetime.now().isoformat()
+    }
+
+# --- API Router Endpoints ---
 api_router = APIRouter(prefix="/api")
 
 @api_router.post("/auth/signup", response_model=TokenResponse)
@@ -172,13 +171,21 @@ async def signup(request: SignupRequest, db: AsyncSession = Depends(get_db)):
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Account already exists")
     
-    new_user = Profile(email=request.email, name=request.name, password_hash=hash_password(request.password), role='user')
+    new_user = Profile(
+        email=request.email, 
+        name=request.name, 
+        password_hash=hash_password(request.password), 
+        role='user'
+    )
     db.add(new_user)
     await db.commit()
     await db.refresh(new_user)
     
     token = create_access_token({"sub": str(new_user.id), "role": new_user.role})
-    return {"token": token, "user": {"id": str(new_user.id), "email": new_user.email, "name": new_user.name, "role": new_user.role}}
+    return {
+        "token": token, 
+        "user": {"id": str(new_user.id), "email": new_user.email, "name": new_user.name, "role": new_user.role}
+    }
 
 @api_router.post("/auth/login", response_model=TokenResponse)
 async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
@@ -188,15 +195,27 @@ async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
     token = create_access_token({"sub": str(user.id), "role": user.role})
-    return {"token": token, "user": {"id": str(user.id), "email": user.email, "name": user.name, "role": user.role}}
+    return {
+        "token": token, 
+        "user": {"id": str(user.id), "email": user.email, "name": user.name, "role": user.role}
+    }
 
 @api_router.get("/auth/me", response_model=ProfileResponse)
 async def get_me(current_user: Profile = Depends(get_current_user)):
-    return {"id": str(current_user.id), "email": current_user.email, "name": current_user.name, "role": current_user.role}
+    return {
+        "id": str(current_user.id), 
+        "email": current_user.email, 
+        "name": current_user.name, 
+        "role": current_user.role
+    }
 
 @api_router.get("/impact-logs/my-logs", response_model=List[ImpactLogResponse])
 async def get_my_logs(current_user: Profile = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(ImpactLog).where(ImpactLog.user_id == current_user.id).order_by(ImpactLog.created_at.desc()))
+    result = await db.execute(
+        select(ImpactLog)
+        .where(ImpactLog.user_id == current_user.id)
+        .order_by(ImpactLog.created_at.desc())
+    )
     logs = result.scalars().all()
     return [serialize_log(log) for log in logs]
 
@@ -205,7 +224,8 @@ async def create_impact_log(request: ImpactLogCreate, current_user: Profile = De
     new_log = ImpactLog(
         user_id=current_user.id, name=request.name, locality=request.locality,
         gps_latitude=request.gps_latitude, gps_longitude=request.gps_longitude,
-        impact_date=request.impact_date, category=request.category, description=request.description, status='Solving'
+        impact_date=request.impact_date, category=request.category, 
+        description=request.description, status='Solving'
     )
     db.add(new_log)
     await db.commit()
@@ -216,17 +236,24 @@ async def create_impact_log(request: ImpactLogCreate, current_user: Profile = De
 async def get_all_logs(current_user: Profile = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     if current_user.role != 'admin':
         raise HTTPException(status_code=403, detail="Admin only")
-    result = await db.execute(select(ImpactLog, Profile).join(Profile, ImpactLog.user_id == Profile.id).order_by(ImpactLog.created_at.desc()))
+    
+    result = await db.execute(
+        select(ImpactLog, Profile)
+        .join(Profile, ImpactLog.user_id == Profile.id)
+        .order_by(ImpactLog.created_at.desc())
+    )
     return [serialize_log(log, profile) for log, profile in result.all()]
 
 @api_router.patch("/impact-logs/{log_id}/status", response_model=ImpactLogResponse)
 async def update_log_status(log_id: str, status_update: StatusUpdate, current_user: Profile = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     if current_user.role != 'admin':
         raise HTTPException(status_code=403, detail="Admin only")
+    
     result = await db.execute(select(ImpactLog).where(ImpactLog.id == log_id))
     log = result.scalar_one_or_none()
     if not log:
         raise HTTPException(status_code=404, detail="Log not found")
+    
     log.status = status_update.status
     await db.commit()
     await db.refresh(log)
@@ -243,9 +270,11 @@ async def get_impact_stats(db: AsyncSession = Depends(get_db)):
     logs = result.scalars().all()
     total = len(logs)
     solved = len([l for l in logs if l.status == 'Solved'])
+    
     categories = {}
     for l in logs:
         categories[l.category] = categories.get(l.category, 0) + 1
+        
     return {
         "total_reports": total,
         "solved": solved,

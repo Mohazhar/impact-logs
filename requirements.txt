@@ -1,15 +1,5 @@
 fastapi
 uvicorn
-sqlalchemy
-pydantic
-pydantic[email]
-python-dotenv
-passlib[bcrypt]
-PyJWT
-psycopg2-binary
-asyncpg
-fastapi
-uvicorn
 sqlalchemy[asyncio]
 aiosqlite
 python-jose[cryptography]
