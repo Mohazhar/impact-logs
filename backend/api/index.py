@@ -13,6 +13,10 @@ from dotenv import load_dotenv
 import jwt
 from passlib.context import CryptContext
 
+# Absolute imports for Vercel
+from database import get_db
+from models import Profile, ImpactLog
+
 # Import local modules - Using absolute imports for Vercel reliability
 try:
     from api.database import get_db
