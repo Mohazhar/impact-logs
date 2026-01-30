@@ -12,7 +12,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 import jwt
 from passlib.context import CryptContext
-
+# to find files in the same 'api' directory.
+from .database import get_db
+from .models import Profile, ImpactLog
 # Absolute imports for Vercel
 from database import get_db
 from models import Profile, ImpactLog
@@ -157,11 +159,11 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid authentication token")
 
-# --- Routes ---
-@app.get("/")
-def root():
-    return {"status": "Backend active", "timestamp": str(datetime.now()), "environment": "Vercel"}
+app = FastAPI(title="Impact Log API")
 
+@app.get("/")
+async def root():
+    return {"status": "Backend active", "message": "Impact Log is running!"}
 api_router = APIRouter(prefix="/api")
 
 @api_router.post("/auth/signup", response_model=TokenResponse)
