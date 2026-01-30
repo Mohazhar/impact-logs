@@ -21,6 +21,13 @@ except ImportError:
     from .database import get_db
     from .models import Profile, ImpactLog
 
+# Use this to ensure it works both locally and on Vercel
+try:
+    from database import get_db
+    from models import Profile, ImpactLog
+except ImportError:
+    from api.database import get_db
+    from api.models import Profile, ImpactLog
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
