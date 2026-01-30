@@ -14,7 +14,7 @@ import jwt
 from passlib.context import CryptContext
 
 # --- ROBUST IMPORT BLOCK ---
-# This ensures database and models are found regardless of the execution context
+# Optimized for Vercel's serverless execution environment
 try:
     from .database import get_db
     from .models import Profile, ImpactLog
@@ -34,24 +34,21 @@ logger = logging.getLogger(__name__)
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
+# Security Configurations
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# Security Config
 JWT_SECRET = os.environ.get('JWT_SECRET', 'your-secret-key')
 JWT_ALGORITHM = os.environ.get('JWT_ALGORITHM', 'HS256')
 JWT_EXPIRE_MINUTES = int(os.environ.get('JWT_EXPIRE_MINUTES', '1440'))
-
 security = HTTPBearer()
 
-# Initialize FastAPI
+# Initialize FastAPI app
 app = FastAPI(title="Impact Log API", redirect_slashes=False)
 
 # Enhanced CORS for Vercel and Local Development
 raw_origins = os.environ.get(
     'CORS_ORIGINS', 
-    'http://localhost:3000,http://localhost:5173'
+    'http://localhost:3000,http://localhost:5173, https://impact-logs-three.vercel.app/'
 ).split(',')
-
 ALLOWED_ORIGINS = [origin.strip() for origin in raw_origins if origin.strip()]
 
 app.add_middleware(
@@ -282,4 +279,5 @@ async def get_impact_stats(db: AsyncSession = Depends(get_db)):
         "categories": categories
     }
 
+# Include the router in the main application
 app.include_router(api_router)
