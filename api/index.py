@@ -12,6 +12,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 import jwt
 from passlib.context import CryptContext
+import bcrypt
+# Fix for passlib/bcrypt compatibility issue
+if not hasattr(bcrypt, "__about__"):
+    bcrypt.__about__ = type('About', (object,), {'__version__': bcrypt.__version__})
 
 # --- ROBUST IMPORT BLOCK ---
 try:

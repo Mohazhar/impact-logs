@@ -1,11 +1,19 @@
+# Core Backend
 fastapi
 uvicorn
-sqlalchemy[asyncio]
-aiosqlite
-python-jose[cryptography]
-passlib[bcrypt]
-pyjwt
 python-dotenv
-pydantic[email]
+
+# Database and ORM
 sqlalchemy>=2.0.0
 asyncpg
+aiosqlite
+
+# Security and Authentication
+python-jose[cryptography]
+pyjwt
+pydantic[email]
+
+# FIX: Specific versions to resolve the "AttributeError: module 'bcrypt' has no attribute '__about__'"
+# passlib 1.7.4 requires a specific bcrypt range to avoid the crash you experienced.
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
