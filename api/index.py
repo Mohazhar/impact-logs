@@ -14,7 +14,6 @@ import jwt
 from passlib.context import CryptContext
 
 # --- ROBUST IMPORT BLOCK ---
-# Optimized for Vercel's serverless execution environment
 try:
     from .database import get_db
     from .models import Profile, ImpactLog
@@ -26,7 +25,7 @@ except (ImportError, ValueError):
         from database import get_db
         from models import Profile, ImpactLog
 
-# Setup logging
+# Setup logging - Crucial for Vercel's "Logs" tab
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -41,24 +40,27 @@ JWT_ALGORITHM = os.environ.get('JWT_ALGORITHM', 'HS256')
 JWT_EXPIRE_MINUTES = int(os.environ.get('JWT_EXPIRE_MINUTES', '1440'))
 security = HTTPBearer()
 
-# Initialize FastAPI app
+# Initialize FastAPI app 
+# Senior Fix: redirect_slashes=False prevents 308 redirects that drop CORS headers
 app = FastAPI(title="Impact Log API", redirect_slashes=False)
 
-# --- Explicit CORS Configuration ---
-# Add your NEW frontend URL to this list
+# --- Updated CORS Configuration ---
+# Combined all known frontend URLs to ensure permission is granted
 ALLOWED_ORIGINS = [
-    "https://impact-logs-l6hc.vercel.app",   # Your current frontend
-    "https://impact-logs-three.vercel.app",   # Other variants
-    "http://localhost:3000",                 # Local development
+    "https://impact-logs-l6hc.vercel.app",   # Current Frontend
+    "https://impact-logs-three.vercel.app",  # Backend Domain
+    "https://impact-logs-phi.vercel.app",    # Alternative
+    "http://localhost:3000",
     "http://localhost:5173"
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,           # Permission granted to these URLs
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],                     # Allows POST, GET, OPTIONS, etc.
-    allow_headers=["*"],                     # Allows Authorization headers
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"] # Helps with debugging network issues
 )
 
 # --- Pydantic Schemas ---
@@ -188,16 +190,20 @@ async def signup(request: SignupRequest, db: AsyncSession = Depends(get_db)):
 
 @api_router.post("/auth/login", response_model=TokenResponse)
 async def login(request: LoginRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Profile).where(Profile.email == request.email))
-    user = result.scalar_one_or_none()
-    if not user or not verify_password(request.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-    
-    token = create_access_token({"sub": str(user.id), "role": user.role})
-    return {
-        "token": token, 
-        "user": {"id": str(user.id), "email": user.email, "name": user.name, "role": user.role}
-    }
+    try:
+        result = await db.execute(select(Profile).where(Profile.email == request.email))
+        user = result.scalar_one_or_none()
+        if not user or not verify_password(request.password, user.password_hash):
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+        
+        token = create_access_token({"sub": str(user.id), "role": user.role})
+        return {
+            "token": token, 
+            "user": {"id": str(user.id), "email": user.email, "name": user.name, "role": user.role}
+        }
+    except Exception as e:
+        logger.error(f"Login logic error: {e}")
+        raise
 
 @api_router.get("/auth/me", response_model=ProfileResponse)
 async def get_me(current_user: Profile = Depends(get_current_user)):
