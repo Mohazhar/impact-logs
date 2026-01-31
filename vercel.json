@@ -3,8 +3,17 @@
   "builds": [
     { "src": "api/index.py", "use": "@vercel/python" }
   ],
-  "rewrites": [
-    { "source": "/api/(.*)", "destination": "api/index.py" },
-    { "source": "/(.*)", "destination": "api/index.py" }
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "headers": {
+        "Access-Control-Allow-Origin": "https://impact-logs-l6hc.vercel.app",
+        "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Access-Control-Allow-Credentials": "true"
+      },
+      "dest": "api/index.py"
+    },
+    { "src": "/(.*)", "dest": "api/index.py" }
   ]
 }
