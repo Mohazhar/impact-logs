@@ -46,10 +46,11 @@ export default function LandingPage() {
       <nav className="fixed top-0 w-full z-50 border-b border-white/5 bg-black/40 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center h-20">
           <div className="flex items-center gap-4">
-            <div className="bg-gradient-to-br from-yellow-400 to-tvk-gold p-2 rounded-full shadow-[0_0_20px_rgba(234,179,8,0.2)]">
-               <MapPin className="h-5 w-5 text-tvk-dark" />
-            </div>
-            <span className="text-xl font-black tracking-tighter text-tvk-gold uppercase" style={{ fontFamily: 'Outfit' }}>TVK IMPACT LOG</span>
+            {/* <div className="bg-gradient-to-br from-yellow-400 to-tvk-gold p-2 rounded-full shadow-[0_0_20px_rgba(234,179,8,0.2)] flex items-center justify-center"> */}
+               <img src="/tvk-logo.png" alt="TVK Logo" className="h-40 w-40 object-contain flex-shrink-0" />
+            {/* </div> */}
+            
+            {/* <span className="text-xl font-black tracking-tighter text-tvk-gold uppercase" style={{ fontFamily: 'Outfit' }}>TVK MAKKAL KURAL</span> */}
           </div>
           
           <div className="hidden lg:flex items-center gap-8">
@@ -173,7 +174,7 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="py-20 border-t border-white/5 bg-tvk-dark text-center">
         <div className="max-w-7xl mx-auto px-6">
-          <span className="text-tvk-gold font-black tracking-tighter uppercase text-2xl">TVK IMPACT LOG</span>
+          <span className="text-tvk-gold font-black tracking-tighter uppercase text-2xl">TVK MAKKAL KURAL</span>
           <p className="mt-4 text-[10px] font-bold uppercase tracking-[0.5em] text-gray-600 italic">
             பிறப்பொக்கும் எல்லா உயிர்க்கும்
           </p>
