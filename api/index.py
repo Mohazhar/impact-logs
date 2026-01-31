@@ -51,7 +51,7 @@ app = FastAPI(title="Impact Log API", redirect_slashes=False)
 # --- Updated CORS Configuration ---
 # Combined all known frontend URLs to ensure permission is granted
 ALLOWED_ORIGINS = [
-    "https://impact-logs-l6hc.vercel.app",   # Current Frontend
+    "https://tvkmakkalkural.vercel.app/",   # Current Frontend
     "https://impact-logs-three.vercel.app",  # Backend Domain
     "https://impact-logs-phi.vercel.app",    # Alternative
     "http://localhost:3000",
