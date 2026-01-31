@@ -7,3 +7,5 @@ passlib[bcrypt]
 pyjwt
 python-dotenv
 pydantic[email]
+sqlalchemy>=2.0.0
+asyncpg
