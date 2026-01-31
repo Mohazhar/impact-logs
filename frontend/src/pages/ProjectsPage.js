@@ -4,7 +4,7 @@ import { Button } from '../components/ui/button';
 
 export default function ProjectsPage() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [isTamil, setIsTamil] = useState(true);
+  const [isTamil, setIsTamil] = useState(false);
 
   // Bilingual Content Dictionary
   const t = {

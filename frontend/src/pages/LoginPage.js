@@ -13,7 +13,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isTamil, setIsTamil] = useState(true);
+  const [isTamil, setIsTamil] = useState(false);
 
   // Content Strings
   const t = {

@@ -24,7 +24,7 @@ export default function LiveMaps() {
   const navigate = useNavigate();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isTamil, setIsTamil] = useState(true);
+  const [isTamil, setIsTamil] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [selectedLog, setSelectedLog] = useState(null);

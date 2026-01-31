@@ -8,7 +8,7 @@ export default function CommunityActivity() {
   const navigate = useNavigate();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isTamil, setIsTamil] = useState(true);
+  const [isTamil, setIsTamil] = useState(false);
 
   // Bilingual Content Dictionary
   const t = {

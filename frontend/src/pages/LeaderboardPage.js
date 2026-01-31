@@ -5,7 +5,7 @@ import { Button } from '../components/ui/button';
 
 export default function LeaderboardPage() {
   const navigate = useNavigate();
-  const [isTamil, setIsTamil] = useState(true);
+  const [isTamil, setIsTamil] = useState(false);
 
   // Content Strings
   const t = {

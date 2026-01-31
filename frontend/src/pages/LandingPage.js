@@ -5,8 +5,8 @@ import { Button } from '../components/ui/button';
 
 export default function LandingPage() {
   const navigate = useNavigate();
-  // Default to Tamil as per the official reference style
-  const [isTamil, setIsTamil] = useState(true);
+  // Default to English as per the official reference style
+  const [isTamil, setIsTamil] = useState(false);
 
   // Exact content strings maintained from your original logic
   const t = {

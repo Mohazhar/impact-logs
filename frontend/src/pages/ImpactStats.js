@@ -8,7 +8,7 @@ export default function ImpactStats() {
   const navigate = useNavigate();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [isTamil, setIsTamil] = useState(true);
+  const [isTamil, setIsTamil] = useState(false);
 
   const t = {
     back: isTamil ? "முகப்பு" : "Home",
